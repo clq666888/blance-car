@@ -16,10 +16,10 @@ int Vertical_out,Velocity_out,Turn_out,Target_Speed,Target_turn,MOTO1,MOTO2;  //
 float Med_Angle=1;//平衡角度偏移量(机械中值)，小车往前倒地极限角，和往后倒地极限角之和除以2
 
 float Vertical_Kp=390,Vertical_Kd=1.5;    //KP:0~1000,Kd:0~10   
-float Velocity_Kp=0.4,Velocity_Ki=0.4/200;    //KP:0~1,Ki=KP/200
+float Velocity_Kp=0.45,Velocity_Ki=0.1;    //KP:0~1,Ki=KP/200
 //float Vertical_Kp=0,Vertical_Kd=0;    //KP:0~1000,Kd:0~10   
 //float Velocity_Kp=0,Velocity_Ki=0;    //KP:0~1,Ki=KP/200
-float Turn_Kp=20,Turn_Kd=0.4;
+float Turn_Kp=20,Turn_Kd=0.7,Turn_Ki=0.6;
 
 extern TIM_HandleTypeDef htim2,htim4;
 extern float distance;
@@ -64,8 +64,10 @@ int Velocity(int Target,int encoder_L,int encoder_R)
 //角速度 目标转向角度值
 int Turn(float gyro_Z,int Target_turn)
 {
+	static int gyro_z_s;
 	int temp;
-	temp=Turn_Kp*Target_turn+Turn_Kd*gyro_Z;
+	gyro_z_s+=gyro_Z;
+	temp=Turn_Kp*Target_turn+Turn_Kd*gyro_Z+Turn_Ki*gyro_z_s;
 	return temp;
 }
 
@@ -83,7 +85,7 @@ void Control()   //每隔10ms调用一次，利用MPU6050INT每隔10ms输出低�
 	if((Fore==0)&&(Back==0))Target_Speed=0;//未接受到前进后退指令-->速度清零，稳在原地
 	if(Fore==1)
 	{
-		distance=51;  //超声波模块损坏，暂时用此代码屏蔽距离检测保护功能
+		distance=51;  //若超声波模块损坏，可暂时用此代码屏蔽距离检测保护功能
 		if(distance<50)       //超声波测距保护功能
 			Target_Speed--;
 		else
@@ -99,8 +101,16 @@ void Control()   //每隔10ms调用一次，利用MPU6050INT每隔10ms输出低�
 	Target_turn=Target_turn>SPEED_Z?SPEED_Z:(Target_turn<-SPEED_Z?(-SPEED_Z):Target_turn);//限幅( (20*100) * 100   )
 	
 	/*转向约束*/
-	if((Left==0)&&(Right==0))Turn_Kd=0.6;//若无左右转向指令，则开启转向约束
-	else if((Left==1)||(Right==1))Turn_Kd=0;//若左右转向指令接收到，则去掉转向约束
+	if((Left==0)&&(Right==0))//若无左右转向指令，则开启转向约束
+	{
+		Turn_Kd=0.7;
+		Turn_Ki=0.6;
+	}
+	else if((Left==1)||(Right==1))//若左右转向指令接收到，则去掉转向约束
+	{
+		Turn_Kd=0;
+		Turn_Ki=0;
+	}
 
 	//将数据传入pid控制器计算输出结果
 	Velocity_out=Velocity(Target_Speed,Encoder_Left,Encoder_Right);//速度环
